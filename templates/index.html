@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Emotion Recognition</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Roboto:wght@300;400&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        /* Global Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(180deg, #6a11cb, #2575fc); /* Gradient background */
+            color: #fff;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700; /* Bold text */
+            font-size: 3rem; /* Increase font size */
+            background: linear-gradient(135deg, #ff009d, #ffb300); /* Pink to orange gradient */
+            -webkit-background-clip: text; /* Apply gradient to text */
+            color: transparent; /* Make text transparent so the gradient shows */
+        }
+
+        p {
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+            color: white; /* Whitish color for the rest of the text */
+        }
+
+        .container {
+            text-align: center;
+            max-width: 800px;
+            width: 100%;
+            padding: 30px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Gradient Button Style */
+        .gradient-btn {
+            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .gradient-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .record-btn {
+            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .record-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        #audioPlayer {
+            margin-top: 20px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 400px; /* Limit audio player size */
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            display: none;
+        }
+
+        .emotion-text {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .emoji {
+            font-size: 70px;  /* Adjust size as needed */
+            text-align: center;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .upload-container, .record-container {
+            margin-bottom: 30px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            .gradient-btn, .record-btn {
+                width: 100%; /* Full-width buttons */
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Heading Section -->
+        <h1>Discover <span>Your Emotions</span> Through Speech!</h1>
+        <p>Upload or record your voice and let our AI predict how you’re feeling in real-time!</p>
+
+        <!-- Upload Form -->
+        <div class="upload-container">
+            <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+                <input type="file" class="form-control mb-3" id="file" name="file" accept=".mp3,.wav" required>
+                <button type="submit" class="gradient-btn">Upload Audio</button>
+            </form>
+        </div>
+
+        <!-- Recording Section -->
+        <div class="record-container">
+            <h3>Or Record Your Voice</h3>
+            <button id="startRecording" class="record-btn" onclick="startRecording()">Start Recording</button>
+            <button id="stopRecording" class="record-btn" onclick="stopRecording()" disabled>Stop Recording</button>
+
+            <!-- Audio Player -->
+            <audio id="audioPlayer" controls></audio>
+
+            <button id="uploadRecordedAudio" class="gradient-btn" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>
+        </div>
+
+        <!-- Result Section -->
+        <div id="result" class="result">
+            <div class="emotion-text" id="emotion-label"></div>
+            <div class="emoji" id="emotion-emoji"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        let audioUrl;
+
+        function startRecording() {
+            audioChunks = [];
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                        audioUrl = URL.createObjectURL(audioBlob);
+                        document.getElementById('audioPlayer').src = audioUrl;
+                        document.getElementById('uploadRecordedAudio').style.display = 'inline';
+                    };
+                    mediaRecorder.start();
+                    document.getElementById('startRecording').disabled = true;
+                    document.getElementById('stopRecording').disabled = false;
+                });
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            document.getElementById('startRecording').disabled = false;
+            document.getElementById('stopRecording').disabled = true;
+        }
+
+        function uploadRecordedAudio() {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'recorded_audio.mp3');
+
+            // Send the FormData to the backend (POST request)
+            fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;
+                const emoji = {
+                    "neutral": "😐",
+                    "calm": "😌",
+                    "happy": "😊",
+                    "sad": "😢",
+                    "angry": "😡",
+                    "fear": "😱",
+                    "disgust": "🤢",
+                    "surprise": "😲"
+                };
+
+                const emotion = data.emotion.split(' ')[0]; // Extract emotion name (e.g., 'angry')
+                document.getElementById('emotion-emoji').innerHTML = emoji[emotion] || '❓'; // Default to a question mark if no match is found
+                document.getElementById('result').style.display = 'block';
+            })
+            .catch(error => {
+                document.getElementById('result').innerText = `Error: ${error.message}`;
+            });
+        }
+
+        // Handling the file upload form
+        document.getElementById('uploadForm').onsubmit = function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;
+                const emoji = {
+                    "neutral": "😐",
+                    "calm": "😌",
+                    "happy": "😊",
+                    "sad": "😢",
+                    "angry": "😡",
+                    "fear": "😱",
+                    "disgust": "🤢",
+                    "surprise": "😲"
+                };
+
+                const emotion = data.emotion.split(' ')[0];  // Extract emotion name (e.g., 'angry')
+                document.getElementById('emotion-emoji').innerHTML = emoji[emotion] || '❓';  // Default to a question mark if no match is found
+                document.getElementById('result').style.display = 'block';
+            })
+            .catch(error => {
+                document.getElementById('result').innerText = `Error: ${error.message}`;
+            });
+        };
+    </script>
+
+</body>
+</html>
+
+
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <meta name="viewport" content="width=device-width, initial-scale=1.0">-->
+<!--    <title>Speech Emotion Recognition</title>-->
+
+<!--    &lt;!&ndash; Google Fonts &ndash;&gt;-->
+<!--    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Roboto:wght@300;400&display=swap" rel="stylesheet">-->
+
+<!--    &lt;!&ndash; Bootstrap 5 CDN &ndash;&gt;-->
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">-->
+
+<!--    <style>-->
+<!--        /* Global Styles */-->
+<!--        body {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            background: linear-gradient(180deg, #6a11cb, #2575fc); /* Gradient background */-->
+<!--            color: #fff;-->
+<!--            height: 100vh;-->
+<!--            margin: 0;-->
+<!--            display: flex;-->
+<!--            justify-content: center;-->
+<!--            align-items: center;-->
+<!--            overflow: hidden;-->
+<!--        }-->
+
+<!--        h1 {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            font-weight: 700; /* Bold text */-->
+<!--            font-size: 3rem; /* Increase font size */-->
+<!--            background: linear-gradient(135deg, #ff009d, #ffb300); /* Pink to orange gradient */-->
+<!--            -webkit-background-clip: text; /* Apply gradient to text */-->
+<!--            color: transparent; /* Make text transparent so the gradient shows */-->
+<!--        }-->
+
+<!--        p {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            text-align: center;-->
+<!--        }-->
+
+<!--        .container {-->
+<!--            text-align: center;-->
+<!--            max-width: 800px;-->
+<!--            width: 100%;-->
+<!--            padding: 30px;-->
+<!--            border-radius: 12px;-->
+<!--            background: rgba(255, 255, 255, 0.1);-->
+<!--            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);-->
+<!--        }-->
+
+<!--        /* Gradient Button Style */-->
+<!--        .gradient-btn {-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */-->
+<!--            border: none;-->
+<!--            padding: 12px 30px;-->
+<!--            font-size: 18px;-->
+<!--            font-weight: 600;-->
+<!--            border-radius: 8px;-->
+<!--            color: #fff;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.3s ease;-->
+<!--            margin-top: 20px;-->
+<!--        }-->
+
+<!--        .gradient-btn:hover {-->
+<!--            transform: scale(1.05);-->
+<!--            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);-->
+<!--        }-->
+
+<!--        .record-btn {-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */-->
+<!--            border: none;-->
+<!--            padding: 12px 30px;-->
+<!--            font-size: 18px;-->
+<!--            font-weight: 600;-->
+<!--            border-radius: 8px;-->
+<!--            color: #fff;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.3s ease;-->
+<!--            margin-top: 20px;-->
+<!--        }-->
+
+<!--        .record-btn:hover {-->
+<!--            transform: scale(1.05);-->
+<!--            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);-->
+<!--        }-->
+
+<!--        #audioPlayer {-->
+<!--            margin-top: 20px;-->
+<!--            border-radius: 8px;-->
+<!--            width: 100%;-->
+<!--            max-width: 400px; /* Limit audio player size */-->
+<!--        }-->
+
+<!--        .result {-->
+<!--            margin-top: 20px;-->
+<!--            padding: 20px;-->
+<!--            background: rgba(255, 255, 255, 0.2);-->
+<!--            border-radius: 10px;-->
+<!--            display: none;-->
+<!--        }-->
+
+<!--        .emotion-text {-->
+<!--            font-size: 24px;-->
+<!--            font-weight: 600;-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */-->
+<!--            -webkit-background-clip: text;-->
+<!--            color: transparent;-->
+<!--        }-->
+
+<!--        .emoji {-->
+<!--            font-size: 70px;  /* Adjust size as needed */-->
+<!--            text-align: center;-->
+<!--            margin-top: 10px;-->
+<!--            display: inline-block;-->
+<!--        }-->
+
+<!--        .upload-container, .record-container {-->
+<!--            margin-bottom: 30px;-->
+<!--        }-->
+
+<!--        /* Responsive Design */-->
+<!--        @media (max-width: 768px) {-->
+<!--            .container {-->
+<!--                padding: 20px;-->
+<!--            }-->
+<!--            .gradient-btn, .record-btn {-->
+<!--                width: 100%; /* Full-width buttons */-->
+<!--            }-->
+<!--        }-->
+
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--    <div class="container">-->
+<!--        &lt;!&ndash; Heading Section &ndash;&gt;-->
+<!--        <h1>Discover Your Emotions Through Speech!</h1>-->
+<!--        <p>Upload or record your voice and let our AI predict how you’re feeling in real-time!</p>-->
+
+<!--        &lt;!&ndash; Upload Form &ndash;&gt;-->
+<!--        <div class="upload-container">-->
+<!--            <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">-->
+<!--                <input type="file" class="form-control mb-3" id="file" name="file" accept=".mp3,.wav" required>-->
+<!--                <button type="submit" class="gradient-btn">Upload Audio</button>-->
+<!--            </form>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Recording Section &ndash;&gt;-->
+<!--        <div class="record-container">-->
+<!--            <h3>Or Record Your Voice</h3>-->
+<!--            <button id="startRecording" class="record-btn" onclick="startRecording()">Start Recording</button>-->
+<!--            <button id="stopRecording" class="record-btn" onclick="stopRecording()" disabled>Stop Recording</button>-->
+
+<!--            &lt;!&ndash; Audio Player &ndash;&gt;-->
+<!--            <audio id="audioPlayer" controls></audio>-->
+
+<!--            <button id="uploadRecordedAudio" class="gradient-btn" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Result Section &ndash;&gt;-->
+<!--        <div id="result" class="result">-->
+<!--            <div class="emotion-text" id="emotion-label"></div>-->
+<!--            <div class="emoji" id="emotion-emoji"></div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; JavaScript &ndash;&gt;-->
+<!--    <script>-->
+<!--        let mediaRecorder;-->
+<!--        let audioChunks = [];-->
+<!--        let audioBlob;-->
+<!--        let audioUrl;-->
+
+<!--        function startRecording() {-->
+<!--            audioChunks = [];-->
+<!--            navigator.mediaDevices.getUserMedia({ audio: true })-->
+<!--                .then(stream => {-->
+<!--                    mediaRecorder = new MediaRecorder(stream);-->
+<!--                    mediaRecorder.ondataavailable = event => {-->
+<!--                        audioChunks.push(event.data);-->
+<!--                    };-->
+<!--                    mediaRecorder.onstop = () => {-->
+<!--                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });-->
+<!--                        audioUrl = URL.createObjectURL(audioBlob);-->
+<!--                        document.getElementById('audioPlayer').src = audioUrl;-->
+<!--                        document.getElementById('uploadRecordedAudio').style.display = 'inline';-->
+<!--                    };-->
+<!--                    mediaRecorder.start();-->
+<!--                    document.getElementById('startRecording').disabled = true;-->
+<!--                    document.getElementById('stopRecording').disabled = false;-->
+<!--                });-->
+<!--        }-->
+
+<!--        function stopRecording() {-->
+<!--            mediaRecorder.stop();-->
+<!--            document.getElementById('startRecording').disabled = false;-->
+<!--            document.getElementById('stopRecording').disabled = true;-->
+<!--        }-->
+
+<!--        function uploadRecordedAudio() {-->
+<!--            const formData = new FormData();-->
+<!--            formData.append('file', audioBlob, 'recorded_audio.mp3');-->
+
+<!--            // Send the FormData to the backend (POST request)-->
+<!--            fetch('/upload', {-->
+<!--                method: 'POST',-->
+<!--                body: formData,-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;-->
+<!--                const emoji = {-->
+<!--                    "neutral": "😐",-->
+<!--                    "calm": "😌",-->
+<!--                    "happy": "😊",-->
+<!--                    "sad": "😢",-->
+<!--                    "angry": "😡",-->
+<!--                    "fear": "😱",-->
+<!--                    "disgust": "🤢",-->
+<!--                    "surprise": "😲"-->
+<!--                };-->
+
+<!--                const emotion = data.emotion.split(' ')[0]; // Extract emotion name (e.g., 'angry')-->
+<!--                document.getElementById('emotion-emoji').innerHTML = emoji[emotion] || '❓'; // Default to a question mark if no match is found-->
+<!--                document.getElementById('result').style.display = 'block';-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                document.getElementById('result').innerText = `Error: ${error.message}`;-->
+<!--            });-->
+<!--        }-->
+
+<!--        // Handling the file upload form-->
+<!--        document.getElementById('uploadForm').onsubmit = function(event) {-->
+<!--            event.preventDefault();-->
+<!--            const formData = new FormData(this);-->
+<!--            fetch('/upload', {-->
+<!--                method: 'POST',-->
+<!--                body: formData,-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;-->
+<!--                const emoji = {-->
+<!--                    "neutral": "😐",-->
+<!--                    "calm": "😌",-->
+<!--                    "happy": "😊",-->
+<!--                    "sad": "😢",-->
+<!--                    "angry": "😡",-->
+<!--                    "fear": "😱",-->
+<!--                    "disgust": "🤢",-->
+<!--                    "surprise": "😲"-->
+<!--                };-->
+
+<!--                const emotion = data.emotion.split(' ')[0];  // Extract emotion name (e.g., 'angry')-->
+<!--                document.getElementById('emotion-emoji').innerHTML = emoji[emotion] || '❓';  // Default to a question mark if no match is found-->
+<!--                document.getElementById('result').style.display = 'block';-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                document.getElementById('result').innerText = `Error: ${error.message}`;-->
+<!--            });-->
+<!--        };-->
+<!--    </script>-->
+
+<!--</body>-->
+<!--</html>-->
+
+
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <meta name="viewport" content="width=device-width, initial-scale=1.0">-->
+<!--    <title>Speech Emotion Recognition</title>-->
+
+<!--    &lt;!&ndash; Google Fonts &ndash;&gt;-->
+<!--    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Roboto:wght@300;400&display=swap" rel="stylesheet">-->
+
+<!--    &lt;!&ndash; Bootstrap 5 CDN &ndash;&gt;-->
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">-->
+
+<!--    <style>-->
+<!--        /* Global Styles */-->
+<!--        body {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            background: linear-gradient(180deg, #6a11cb, #2575fc); /* Gradient background */-->
+<!--            color: #fff;-->
+<!--            height: 100vh;-->
+<!--            margin: 0;-->
+<!--            display: flex;-->
+<!--            justify-content: center;-->
+<!--            align-items: center;-->
+<!--            overflow: hidden;-->
+<!--        }-->
+
+<!--        h1 {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            font-weight: 700; /* Bold text */-->
+<!--            font-size: 3rem; /* Increase font size */-->
+<!--            background: linear-gradient(135deg, #ff009d, #ffb300); /* Pink to orange gradient */-->
+<!--            -webkit-background-clip: text; /* Apply gradient to text */-->
+<!--            color: transparent; /* Make text transparent so the gradient shows */-->
+<!--        }-->
+
+<!--        p {-->
+<!--            font-family: 'Poppins', sans-serif;-->
+<!--            text-align: center;-->
+<!--        }-->
+
+<!--        .container {-->
+<!--            text-align: center;-->
+<!--            max-width: 800px;-->
+<!--            width: 100%;-->
+<!--            padding: 30px;-->
+<!--            border-radius: 12px;-->
+<!--            background: rgba(255, 255, 255, 0.1);-->
+<!--            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);-->
+<!--        }-->
+
+<!--        /* Gradient Button Style */-->
+<!--        .gradient-btn {-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */-->
+<!--            border: none;-->
+<!--            padding: 12px 30px;-->
+<!--            font-size: 18px;-->
+<!--            font-weight: 600;-->
+<!--            border-radius: 8px;-->
+<!--            color: #fff;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.3s ease;-->
+<!--            margin-top: 20px;-->
+<!--        }-->
+
+<!--        .gradient-btn:hover {-->
+<!--            transform: scale(1.05);-->
+<!--            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);-->
+<!--        }-->
+
+<!--        .record-btn {-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */-->
+<!--            border: none;-->
+<!--            padding: 12px 30px;-->
+<!--            font-size: 18px;-->
+<!--            font-weight: 600;-->
+<!--            border-radius: 8px;-->
+<!--            color: #fff;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.3s ease;-->
+<!--            margin-top: 20px;-->
+<!--        }-->
+
+<!--        .record-btn:hover {-->
+<!--            transform: scale(1.05);-->
+<!--            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);-->
+<!--        }-->
+
+<!--        #audioPlayer {-->
+<!--            margin-top: 20px;-->
+<!--            border-radius: 8px;-->
+<!--            width: 100%;-->
+<!--            max-width: 400px; /* Limit audio player size */-->
+<!--        }-->
+
+<!--        .result {-->
+<!--            margin-top: 20px;-->
+<!--            padding: 20px;-->
+<!--            background: rgba(255, 255, 255, 0.2);-->
+<!--            border-radius: 10px;-->
+<!--            display: none;-->
+<!--        }-->
+
+<!--        .emotion-text {-->
+<!--            font-size: 24px;-->
+<!--            font-weight: 600;-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */-->
+<!--            -webkit-background-clip: text;-->
+<!--            color: transparent;-->
+<!--        }-->
+
+<!--        .emoji {-->
+<!--            font-size: 50px;  /* Adjust size if needed */-->
+<!--            color: transparent;-->
+<!--            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */-->
+<!--            -webkit-background-clip: text;-->
+<!--            display: inline-block;-->
+<!--            width: 60px;  /* Add a fixed width if needed */-->
+<!--            height: 60px; /* Add a fixed height if needed */-->
+<!--            text-align: center;-->
+<!--            line-height: 60px; /* Center the emoji */-->
+<!--        }-->
+
+<!--        .upload-container, .record-container {-->
+<!--            margin-bottom: 30px;-->
+<!--        }-->
+
+<!--        /* Responsive Design */-->
+<!--        @media (max-width: 768px) {-->
+<!--            .container {-->
+<!--                padding: 20px;-->
+<!--            }-->
+<!--            .gradient-btn, .record-btn {-->
+<!--                width: 100%; /* Full-width buttons */-->
+<!--            }-->
+<!--        }-->
+
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--    <div class="container">-->
+<!--        &lt;!&ndash; Heading Section &ndash;&gt;-->
+<!--        <h1>Discover Your Emotions Through Speech!</h1>-->
+<!--        <p>Upload or record your voice and let our AI predict how you’re feeling in real-time!</p>-->
+
+<!--        &lt;!&ndash; Upload Form &ndash;&gt;-->
+<!--        <div class="upload-container">-->
+<!--            <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">-->
+<!--                <input type="file" class="form-control mb-3" id="file" name="file" accept=".mp3,.wav" required>-->
+<!--                <button type="submit" class="gradient-btn">Upload Audio</button>-->
+<!--            </form>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Recording Section &ndash;&gt;-->
+<!--        <div class="record-container">-->
+<!--            <h3>Or Record Your Voice</h3>-->
+<!--            <button id="startRecording" class="record-btn" onclick="startRecording()">Start Recording</button>-->
+<!--            <button id="stopRecording" class="record-btn" onclick="stopRecording()" disabled>Stop Recording</button>-->
+
+<!--            &lt;!&ndash; Audio Player &ndash;&gt;-->
+<!--            <audio id="audioPlayer" controls></audio>-->
+
+<!--            <button id="uploadRecordedAudio" class="gradient-btn" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Result Section &ndash;&gt;-->
+<!--        <div id="result" class="result">-->
+<!--            <div class="emotion-text" id="emotion-label"></div>-->
+<!--            <div class="emoji" id="emotion-emoji"></div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; JavaScript &ndash;&gt;-->
+<!--    <script>-->
+<!--        let mediaRecorder;-->
+<!--        let audioChunks = [];-->
+<!--        let audioBlob;-->
+<!--        let audioUrl;-->
+
+<!--        function startRecording() {-->
+<!--            audioChunks = [];-->
+<!--            navigator.mediaDevices.getUserMedia({ audio: true })-->
+<!--                .then(stream => {-->
+<!--                    mediaRecorder = new MediaRecorder(stream);-->
+<!--                    mediaRecorder.ondataavailable = event => {-->
+<!--                        audioChunks.push(event.data);-->
+<!--                    };-->
+<!--                    mediaRecorder.onstop = () => {-->
+<!--                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });-->
+<!--                        audioUrl = URL.createObjectURL(audioBlob);-->
+<!--                        document.getElementById('audioPlayer').src = audioUrl;-->
+<!--                        document.getElementById('uploadRecordedAudio').style.display = 'inline';-->
+<!--                    };-->
+<!--                    mediaRecorder.start();-->
+<!--                    document.getElementById('startRecording').disabled = true;-->
+<!--                    document.getElementById('stopRecording').disabled = false;-->
+<!--                });-->
+<!--        }-->
+
+<!--        function stopRecording() {-->
+<!--            mediaRecorder.stop();-->
+<!--            document.getElementById('startRecording').disabled = false;-->
+<!--            document.getElementById('stopRecording').disabled = true;-->
+<!--        }-->
+
+<!--        function uploadRecordedAudio() {-->
+<!--            const formData = new FormData();-->
+<!--            formData.append('file', audioBlob, 'recorded_audio.mp3');-->
+
+<!--            // Send the FormData to the backend (POST request)-->
+<!--            fetch('/upload', {-->
+<!--                method: 'POST',-->
+<!--                body: formData,-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;-->
+<!--                document.getElementById('emotion-emoji').innerHTML = data.emotion.split(' ')[1]; // Use innerHTML for the emoji-->
+<!--                document.getElementById('result').style.display = 'block';-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                document.getElementById('result').innerText = `Error: ${error.message}`;-->
+<!--            });-->
+<!--        }-->
+
+<!--        // Handling the file upload form-->
+<!--        document.getElementById('uploadForm').onsubmit = function(event) {-->
+<!--            event.preventDefault();-->
+<!--            const formData = new FormData(this);-->
+<!--            fetch('/upload', {-->
+<!--                method: 'POST',-->
+<!--                body: formData,-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;-->
+<!--                document.getElementById('emotion-emoji').innerHTML = data.emotion.split(' ')[1]; // Use innerHTML for the emoji-->
+<!--                document.getElementById('result').style.display = 'block';-->
+<!--            })-->
+<!--            .catch(error => {-->
+<!--                document.getElementById('result').innerText = `Error: ${error.message}`;-->
+<!--            });-->
+<!--        };-->
+<!--    </script>-->
+
+<!--</body>-->
+<!--</html>-->
+
+
+
+<!--&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;-->
+<!--&lt;!&ndash;<html lang="en">&ndash;&gt;-->
+<!--&lt;!&ndash;<head>&ndash;&gt;-->
+<!--&lt;!&ndash;    <meta charset="UTF-8">&ndash;&gt;-->
+<!--&lt;!&ndash;    <meta name="viewport" content="width=device-width, initial-scale=1.0">&ndash;&gt;-->
+<!--&lt;!&ndash;    <title>Speech Emotion Recognition</title>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Google Fonts &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Roboto:wght@300;400&display=swap" rel="stylesheet">&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; Bootstrap 5 CDN &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <style>&ndash;&gt;-->
+<!--&lt;!&ndash;        /* Global Styles */&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        body {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-family: 'Poppins', sans-serif;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: linear-gradient(135deg, #6a11cb, #2575fc); /* Gradient background */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            color: #fff;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            height: 100vh;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin: 0;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            display: flex;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            justify-content: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            align-items: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            overflow: hidden;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;body {&ndash;&gt;-->
+<!--&lt;!&ndash;    font-family: 'Poppins', sans-serif;&ndash;&gt;-->
+<!--&lt;!&ndash;    background: linear-gradient(180deg, #6a11cb, #2575fc); /* Adjusted gradient based on your image */&ndash;&gt;-->
+<!--&lt;!&ndash;    color: #fff;&ndash;&gt;-->
+<!--&lt;!&ndash;    height: 100vh;&ndash;&gt;-->
+<!--&lt;!&ndash;    margin: 0;&ndash;&gt;-->
+<!--&lt;!&ndash;    display: flex;&ndash;&gt;-->
+<!--&lt;!&ndash;    justify-content: center;&ndash;&gt;-->
+<!--&lt;!&ndash;    align-items: center;&ndash;&gt;-->
+<!--&lt;!&ndash;    overflow: hidden;&ndash;&gt;-->
+<!--&lt;!&ndash;}&ndash;&gt;-->
+
+<!--&lt;!&ndash;        h1, p {&ndash;&gt;-->
+<!--&lt;!&ndash;            font-family: 'Roboto', sans-serif;&ndash;&gt;-->
+<!--&lt;!&ndash;            text-align: center;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        /* Increased font weight for chunkier heading */&ndash;&gt;-->
+<!--&lt;!&ndash;        h1 {&ndash;&gt;-->
+<!--&lt;!&ndash;            font-weight: 700;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .container {&ndash;&gt;-->
+<!--&lt;!&ndash;            text-align: center;&ndash;&gt;-->
+<!--&lt;!&ndash;            max-width: 800px;&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 100%;&ndash;&gt;-->
+<!--&lt;!&ndash;            padding: 30px;&ndash;&gt;-->
+<!--&lt;!&ndash;            border-radius: 12px;&ndash;&gt;-->
+<!--&lt;!&ndash;            background: rgba(255, 255, 255, 0.1);&ndash;&gt;-->
+<!--&lt;!&ndash;            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        /* Gradient Button Style */&ndash;&gt;-->
+<!--&lt;!&ndash;        .gradient-btn {&ndash;&gt;-->
+<!--&lt;!&ndash;            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */&ndash;&gt;-->
+<!--&lt;!&ndash;            border: none;&ndash;&gt;-->
+<!--&lt;!&ndash;            padding: 12px 30px;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 18px;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-weight: 600;&ndash;&gt;-->
+<!--&lt;!&ndash;            border-radius: 8px;&ndash;&gt;-->
+<!--&lt;!&ndash;            color: #fff;&ndash;&gt;-->
+<!--&lt;!&ndash;            cursor: pointer;&ndash;&gt;-->
+<!--&lt;!&ndash;            transition: all 0.3s ease;&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-top: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .gradient-btn:hover {&ndash;&gt;-->
+<!--&lt;!&ndash;            transform: scale(1.05);&ndash;&gt;-->
+<!--&lt;!&ndash;            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .record-btn {&ndash;&gt;-->
+<!--&lt;!&ndash;            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */&ndash;&gt;-->
+<!--&lt;!&ndash;            border: none;&ndash;&gt;-->
+<!--&lt;!&ndash;            padding: 12px 30px;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 18px;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-weight: 600;&ndash;&gt;-->
+<!--&lt;!&ndash;            border-radius: 8px;&ndash;&gt;-->
+<!--&lt;!&ndash;            color: #fff;&ndash;&gt;-->
+<!--&lt;!&ndash;            cursor: pointer;&ndash;&gt;-->
+<!--&lt;!&ndash;            transition: all 0.3s ease;&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-top: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .record-btn:hover {&ndash;&gt;-->
+<!--&lt;!&ndash;            transform: scale(1.05);&ndash;&gt;-->
+<!--&lt;!&ndash;            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        #audioPlayer {&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-top: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;            border-radius: 8px;&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 100%;&ndash;&gt;-->
+<!--&lt;!&ndash;            max-width: 400px; /* Limit audio player size */&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .result {&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-top: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;            padding: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;            background: rgba(255, 255, 255, 0.2);&ndash;&gt;-->
+<!--&lt;!&ndash;            border-radius: 10px;&ndash;&gt;-->
+<!--&lt;!&ndash;            display: none;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .emotion-text {&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 24px;&ndash;&gt;-->
+<!--&lt;!&ndash;            font-weight: 600;&ndash;&gt;-->
+<!--&lt;!&ndash;            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */&ndash;&gt;-->
+<!--&lt;!&ndash;            -webkit-background-clip: text;&ndash;&gt;-->
+<!--&lt;!&ndash;            color: transparent;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .emoji {&ndash;&gt;-->
+<!--&lt;!&ndash;            font-size: 50px;&ndash;&gt;-->
+<!--&lt;!&ndash;            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Gradient color */&ndash;&gt;-->
+<!--&lt;!&ndash;            -webkit-background-clip: text;&ndash;&gt;-->
+<!--&lt;!&ndash;            color: transparent;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        .upload-container, .record-container {&ndash;&gt;-->
+<!--&lt;!&ndash;            margin-bottom: 30px;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        /* Responsive Design */&ndash;&gt;-->
+<!--&lt;!&ndash;        @media (max-width: 768px) {&ndash;&gt;-->
+<!--&lt;!&ndash;            .container {&ndash;&gt;-->
+<!--&lt;!&ndash;                padding: 20px;&ndash;&gt;-->
+<!--&lt;!&ndash;            }&ndash;&gt;-->
+<!--&lt;!&ndash;            .gradient-btn, .record-btn {&ndash;&gt;-->
+<!--&lt;!&ndash;                width: 100%; /* Full-width buttons */&ndash;&gt;-->
+<!--&lt;!&ndash;            }&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;    </style>&ndash;&gt;-->
+<!--&lt;!&ndash;</head>&ndash;&gt;-->
+<!--&lt;!&ndash;<body>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <div class="container">&ndash;&gt;-->
+<!--&lt;!&ndash;        &lt;!&ndash; Heading Section &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;        <h1>Discover Your Emotions Through Speech!</h1>&ndash;&gt;-->
+<!--&lt;!&ndash;        <p>Upload or record your voice and let our AI predict how you’re feeling in real-time!</p>&ndash;&gt;-->
+
+<!--&lt;!&ndash;        &lt;!&ndash; Upload Form &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;        <div class="upload-container">&ndash;&gt;-->
+<!--&lt;!&ndash;            <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">&ndash;&gt;-->
+<!--&lt;!&ndash;                <input type="file" class="form-control mb-3" id="file" name="file" accept=".mp3,.wav" required>&ndash;&gt;-->
+<!--&lt;!&ndash;                <button type="submit" class="gradient-btn">Upload Audio</button>&ndash;&gt;-->
+<!--&lt;!&ndash;            </form>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;        &lt;!&ndash; Recording Section &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;        <div class="record-container">&ndash;&gt;-->
+<!--&lt;!&ndash;            <h3>Or Record Your Voice</h3>&ndash;&gt;-->
+<!--&lt;!&ndash;            <button id="startRecording" class="record-btn" onclick="startRecording()">Start Recording</button>&ndash;&gt;-->
+<!--&lt;!&ndash;            <button id="stopRecording" class="record-btn" onclick="stopRecording()" disabled>Stop Recording</button>&ndash;&gt;-->
+
+<!--&lt;!&ndash;            &lt;!&ndash; Audio Player &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;            <audio id="audioPlayer" controls></audio>&ndash;&gt;-->
+
+<!--&lt;!&ndash;            <button id="uploadRecordedAudio" class="gradient-btn" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;        &lt;!&ndash; Result Section &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;        <div id="result" class="result">&ndash;&gt;-->
+<!--&lt;!&ndash;            <div class="emotion-text" id="emotion-label"></div>&ndash;&gt;-->
+<!--&lt;!&ndash;            <div class="emoji" id="emotion-emoji"></div>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    &lt;!&ndash; JavaScript &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <script>&ndash;&gt;-->
+<!--&lt;!&ndash;        let mediaRecorder;&ndash;&gt;-->
+<!--&lt;!&ndash;        let audioChunks = [];&ndash;&gt;-->
+<!--&lt;!&ndash;        let audioBlob;&ndash;&gt;-->
+<!--&lt;!&ndash;        let audioUrl;&ndash;&gt;-->
+
+<!--&lt;!&ndash;        function startRecording() {&ndash;&gt;-->
+<!--&lt;!&ndash;            audioChunks = [];&ndash;&gt;-->
+<!--&lt;!&ndash;            navigator.mediaDevices.getUserMedia({ audio: true })&ndash;&gt;-->
+<!--&lt;!&ndash;                .then(stream => {&ndash;&gt;-->
+<!--&lt;!&ndash;                    mediaRecorder = new MediaRecorder(stream);&ndash;&gt;-->
+<!--&lt;!&ndash;                    mediaRecorder.ondataavailable = event => {&ndash;&gt;-->
+<!--&lt;!&ndash;                        audioChunks.push(event.data);&ndash;&gt;-->
+<!--&lt;!&ndash;                    };&ndash;&gt;-->
+<!--&lt;!&ndash;                    mediaRecorder.onstop = () => {&ndash;&gt;-->
+<!--&lt;!&ndash;                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });&ndash;&gt;-->
+<!--&lt;!&ndash;                        audioUrl = URL.createObjectURL(audioBlob);&ndash;&gt;-->
+<!--&lt;!&ndash;                        document.getElementById('audioPlayer').src = audioUrl;&ndash;&gt;-->
+<!--&lt;!&ndash;                        document.getElementById('uploadRecordedAudio').style.display = 'inline';&ndash;&gt;-->
+<!--&lt;!&ndash;                    };&ndash;&gt;-->
+<!--&lt;!&ndash;                    mediaRecorder.start();&ndash;&gt;-->
+<!--&lt;!&ndash;                    document.getElementById('startRecording').disabled = true;&ndash;&gt;-->
+<!--&lt;!&ndash;                    document.getElementById('stopRecording').disabled = false;&ndash;&gt;-->
+<!--&lt;!&ndash;                });&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        function stopRecording() {&ndash;&gt;-->
+<!--&lt;!&ndash;            mediaRecorder.stop();&ndash;&gt;-->
+<!--&lt;!&ndash;            document.getElementById('startRecording').disabled = false;&ndash;&gt;-->
+<!--&lt;!&ndash;            document.getElementById('stopRecording').disabled = true;&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        function uploadRecordedAudio() {&ndash;&gt;-->
+<!--&lt;!&ndash;            const formData = new FormData();&ndash;&gt;-->
+<!--&lt;!&ndash;            formData.append('file', audioBlob, 'recorded_audio.mp3');&ndash;&gt;-->
+
+<!--&lt;!&ndash;            // Send the FormData to the backend (POST request)&ndash;&gt;-->
+<!--&lt;!&ndash;            fetch('/upload', {&ndash;&gt;-->
+<!--&lt;!&ndash;                method: 'POST',&ndash;&gt;-->
+<!--&lt;!&ndash;                body: formData,&ndash;&gt;-->
+<!--&lt;!&ndash;            })&ndash;&gt;-->
+<!--&lt;!&ndash;            .then(response => response.json())&ndash;&gt;-->
+<!--&lt;!&ndash;            .then(data => {&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('emotion-emoji').innerText = data.emotion.split(' ')[1];&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('result').style.display = 'block';&ndash;&gt;-->
+<!--&lt;!&ndash;            })&ndash;&gt;-->
+<!--&lt;!&ndash;            .catch(error => {&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error.message}`;&ndash;&gt;-->
+<!--&lt;!&ndash;            });&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+
+<!--&lt;!&ndash;        // Handling the file upload form&ndash;&gt;-->
+<!--&lt;!&ndash;        document.getElementById('uploadForm').onsubmit = function(event) {&ndash;&gt;-->
+<!--&lt;!&ndash;            event.preventDefault();&ndash;&gt;-->
+<!--&lt;!&ndash;            const formData = new FormData(this);&ndash;&gt;-->
+<!--&lt;!&ndash;            fetch('/upload', {&ndash;&gt;-->
+<!--&lt;!&ndash;                method: 'POST',&ndash;&gt;-->
+<!--&lt;!&ndash;                body: formData,&ndash;&gt;-->
+<!--&lt;!&ndash;            })&ndash;&gt;-->
+<!--&lt;!&ndash;            .then(response => response.json())&ndash;&gt;-->
+<!--&lt;!&ndash;            .then(data => {&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('emotion-emoji').innerText = data.emotion.split(' ')[1];&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('result').style.display = 'block';&ndash;&gt;-->
+<!--&lt;!&ndash;            })&ndash;&gt;-->
+<!--&lt;!&ndash;            .catch(error => {&ndash;&gt;-->
+<!--&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error.message}`;&ndash;&gt;-->
+<!--&lt;!&ndash;            });&ndash;&gt;-->
+<!--&lt;!&ndash;        };&ndash;&gt;-->
+<!--&lt;!&ndash;    </script>&ndash;&gt;-->
+
+<!--&lt;!&ndash;</body>&ndash;&gt;-->
+<!--&lt;!&ndash;</html>&ndash;&gt;-->
+
+
+
+<!--&lt;!&ndash;&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;<html lang="en">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;<head>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <meta charset="UTF-8">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <meta name="viewport" content="width=device-width, initial-scale=1.0">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <title>Speech Emotion Recognition</title>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    &lt;!&ndash; Google Fonts &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Roboto:wght@300;400&display=swap" rel="stylesheet">&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    &lt;!&ndash; Bootstrap 5 CDN &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    <style>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        /* Global Styles */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        body {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-family: 'Poppins', sans-serif;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: linear-gradient(135deg, #6a11cb, #2575fc); /* Gradient background */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            color: #fff;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            height: 100vh;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin: 0;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            display: flex;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            justify-content: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            align-items: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            overflow: hidden;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        h1, p {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-family: 'Roboto', sans-serif;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            text-align: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        /* Increased font weight for chunkier heading */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        h1 {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-weight: 700;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .container {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            text-align: center;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            max-width: 800px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            width: 100%;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            padding: 30px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border-radius: 12px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: rgba(255, 255, 255, 0.1);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        /* Gradient Button Style */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        .gradient-btn {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: linear-gradient(135deg, #9c00ff, #ff009d); /* Purple and pink gradient */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border: none;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            padding: 12px 30px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-size: 18px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-weight: 600;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border-radius: 8px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            color: #fff;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            cursor: pointer;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            transition: all 0.3s ease;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin-top: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .gradient-btn:hover {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            transform: scale(1.05);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .record-btn {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: #ff4081;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border: none;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            padding: 12px 30px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-size: 18px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-weight: 600;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border-radius: 8px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            color: #fff;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            cursor: pointer;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            transition: all 0.3s ease;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin-top: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .record-btn:hover {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            transform: scale(1.05);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        #audioPlayer {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin-top: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border-radius: 8px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            width: 100%;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            max-width: 400px; /* Limit audio player size */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .result {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin-top: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            padding: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            background: rgba(255, 255, 255, 0.2);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            border-radius: 10px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            display: none;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .emotion-text {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-size: 24px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-weight: 600;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .emoji {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            font-size: 50px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        .upload-container, .record-container {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            margin-bottom: 30px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        /* Responsive Design */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        @media (max-width: 768px) {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .container {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                padding: 20px;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            }&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .gradient-btn, .record-btn {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                width: 100%; /* Full-width buttons */&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            }&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    </style>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;</head>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;<body>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    <div class="container">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Heading Section &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        <h1>Discover Your Emotions Through Speech!</h1>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        <p>Upload or record your voice and let our AI predict how you’re feeling in real-time!</p>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Upload Form &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        <div class="upload-container">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                <input type="file" class="form-control mb-3" id="file" name="file" accept=".mp3,.wav" required>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                <button type="submit" class="gradient-btn">Upload Audio</button>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            </form>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        </div>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Recording Section &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        <div class="record-container">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <h3>Or Record Your Voice</h3>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <button id="startRecording" class="record-btn" onclick="startRecording()">Start Recording</button>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <button id="stopRecording" class="record-btn" onclick="stopRecording()" disabled>Stop Recording</button>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;            &lt;!&ndash; Audio Player &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <audio id="audioPlayer" controls></audio>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;            <button id="uploadRecordedAudio" class="gradient-btn" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        </div>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Result Section &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        <div id="result" class="result">&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <div class="emotion-text" id="emotion-label"></div>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            <div class="emoji" id="emotion-emoji"></div>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        </div>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    </div>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;    &lt;!&ndash; JavaScript &ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    <script>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        let mediaRecorder;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        let audioChunks = [];&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        let audioBlob;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        let audioUrl;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        function startRecording() {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            audioChunks = [];&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            navigator.mediaDevices.getUserMedia({ audio: true })&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                .then(stream => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    mediaRecorder = new MediaRecorder(stream);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.ondataavailable = event => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                        audioChunks.push(event.data);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.onstop = () => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                        audioUrl = URL.createObjectURL(audioBlob);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                        document.getElementById('audioPlayer').src = audioUrl;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                        document.getElementById('uploadRecordedAudio').style.display = 'inline';&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.start();&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    document.getElementById('startRecording').disabled = true;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                    document.getElementById('stopRecording').disabled = false;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                });&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        function stopRecording() {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            mediaRecorder.stop();&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            document.getElementById('startRecording').disabled = false;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            document.getElementById('stopRecording').disabled = true;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        function uploadRecordedAudio() {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            const formData = new FormData();&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            formData.append('file', audioBlob, 'recorded_audio.mp3');&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;            // Send the FormData to the backend (POST request)&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            fetch('/upload', {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                method: 'POST',&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                body: formData,&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .then(response => response.json())&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .then(data => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('emotion-emoji').innerText = data.emotion.split(' ')[1];&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').style.display = 'block';&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .catch(error => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error.message}`;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            });&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;        // Handling the file upload form&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        document.getElementById('uploadForm').onsubmit = function(event) {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            event.preventDefault();&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            const formData = new FormData(this);&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            fetch('/upload', {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                method: 'POST',&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                body: formData,&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .then(response => response.json())&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .then(data => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('emotion-label').innerText = `Predicted Emotion: ${data.emotion.split(' ')[0]}`;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('emotion-emoji').innerText = data.emotion.split(' ')[1];&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').style.display = 'block';&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            .catch(error => {&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error.message}`;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;            });&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;        };&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;    </script>&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;</body>&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;</html>&ndash;&gt;&ndash;&gt;-->
+
+
+
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<html lang="en">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<head>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <meta charset="UTF-8">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <meta name="viewport" content="width=device-width, initial-scale=1.0">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <title>Speech Emotion Detector</title>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</head>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<body>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <div class="container">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <h1>Speech Emotion Detector</h1>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Upload Form &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <label for="file">Upload an audio file (MP3 or WAV):</label>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <input type="file" id="file" name="file" accept=".mp3,.wav" required>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button type="submit">Upload</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        </form>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Recording Section &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <div id="recorder" style="margin-top: 20px;">&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <h3>Or Record Your Voice</h3>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="startRecording" onclick="startRecording()">Start Recording</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="stopRecording" onclick="stopRecording()" disabled>Stop Recording</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            &lt;!&ndash; Audio Controls &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <audio id="audioPlayer" controls></audio>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            &lt;!&ndash; Buttons for Uploading and Saving &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="uploadRecordedAudio" onclick="uploadRecordedAudio()" style="display:none;">Upload Recorded Audio</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="saveRecordedAudio" onclick="saveRecordedAudio()" style="display:none;">Save Recorded Audio</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        </div>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <div id="result"></div>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    </div>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <script>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let mediaRecorder;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let audioChunks = [];&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let audioBlob;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let audioUrl;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function startRecording() {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            audioChunks = [];&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            navigator.mediaDevices.getUserMedia({ audio: true })&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                .then(stream => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder = new MediaRecorder(stream);&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.ondataavailable = event => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        audioChunks.push(event.data);&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.onstop = () => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        audioUrl = URL.createObjectURL(audioBlob);&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        document.getElementById('audioPlayer').src = audioUrl;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        // Show buttons for uploading and saving the recorded audio&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        document.getElementById('uploadRecordedAudio').style.display = 'inline';&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        document.getElementById('saveRecordedAudio').style.display = 'inline';&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.start();&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    document.getElementById('startRecording').disabled = true;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    document.getElementById('stopRecording').disabled = false;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                });&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function stopRecording() {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            mediaRecorder.stop();&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            document.getElementById('startRecording').disabled = false;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            document.getElementById('stopRecording').disabled = true;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function uploadRecordedAudio() {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            const formData = new FormData();&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            formData.append('file', audioBlob, 'recorded_audio.mp3');&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            // Send the FormData to the backend (POST request)&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            fetch('/upload', {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                method: 'POST',&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                body: formData,&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(response => response.json())&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(data => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Predicted Emotion: ${data.emotion}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .catch(error => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error.message}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            });&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function saveRecordedAudio() {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            const link = document.createElement('a');&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            link.href = audioUrl;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            link.download = 'recorded_audio.mp3';  // Set the filename for download&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            link.click();&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        // Handling the file upload form&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        document.getElementById('uploadForm').onsubmit = function(event) {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            event.preventDefault();&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            const formData = new FormData(this);&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            fetch('/upload', {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                method: 'POST',&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                body: formData,&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(response => response.json())&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(data => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Predicted Emotion: ${data.emotion}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .catch(error => {&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            });&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        };&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    </script>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</body>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</html>&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<html lang="en">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<head>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <meta charset="UTF-8">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <meta name="viewport" content="width=device-width, initial-scale=1.0">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <title>Speech Emotion Detector</title>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</head>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;<body>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <div class="container">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <h1>Speech Emotion Detector</h1>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Upload Form &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <label for="file">Upload an audio file (MP3 or WAV):</label>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <input type="file" id="file" name="file" accept=".mp3,.wav" required>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button type="submit">Upload</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        </form>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        &lt;!&ndash; Recording Section &ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <div id="recorder" style="margin-top: 20px;">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <h3>Or Record Your Voice</h3>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="startRecording" onclick="startRecording()">Start Recording</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <button id="stopRecording" onclick="stopRecording()" disabled>Stop Recording</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <audio id="audioPlayer" controls></audio>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            <form id="recordForm" action="/upload" method="POST" enctype="multipart/form-data" style="display: none;">&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                <input type="hidden" name="file" id="audioFile" />&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                <button type="submit">Upload Recorded Audio</button>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            </form>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        </div>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        <div id="result"></div>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    </div>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    <script>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let mediaRecorder;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        let audioChunks = [];&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function startRecording() {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            audioChunks = [];&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            navigator.mediaDevices.getUserMedia({ audio: true })&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                .then(stream => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder = new MediaRecorder(stream);&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.ondataavailable = event => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        audioChunks.push(event.data);&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.onstop = () => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        const audioUrl = URL.createObjectURL(audioBlob);&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        document.getElementById('audioPlayer').src = audioUrl;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        const audioFile = new File([audioBlob], "recorded_audio.mp3", { type: 'audio/mp3' });&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        // Prepare for upload&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        const formData = new FormData();&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        formData.append('file', audioFile);&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        fetch('/upload', {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                            method: 'POST',&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                            body: formData,&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        })&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        .then(response => response.json())&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        .then(data => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                            document.getElementById('result').innerText = `Predicted Emotion: ${data.emotion}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        })&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        .catch(error => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                            document.getElementById('result').innerText = `Error: ${error}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                        });&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    };&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    mediaRecorder.start();&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    document.getElementById('startRecording').disabled = true;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                    document.getElementById('stopRecording').disabled = false;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                });&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        function stopRecording() {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            mediaRecorder.stop();&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            document.getElementById('startRecording').disabled = false;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            document.getElementById('stopRecording').disabled = true;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        }&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        // Handling the file upload form&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        document.getElementById('uploadForm').onsubmit = function(event) {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            event.preventDefault();&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            const formData = new FormData(this);&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            fetch('/upload', {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                method: 'POST',&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                body: formData,&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(response => response.json())&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .then(data => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Predicted Emotion: ${data.emotion}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            })&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            .catch(error => {&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;                document.getElementById('result').innerText = `Error: ${error}`;&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;            });&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;        };&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;    </script>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</body>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;&lt;!&ndash;</html>&ndash;&gt;&ndash;&gt;&ndash;&gt;&ndash;&gt;-->
