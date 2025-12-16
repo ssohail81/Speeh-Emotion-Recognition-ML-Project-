@@ -1,5 +1,5 @@
 # Use a Python base image
-FROM python:3.9-slim
+FROM python:3.13-slim
 
 # Install FFmpeg
 RUN apt-get update && apt-get install -y \
