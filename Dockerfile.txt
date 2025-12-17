@@ -1,40 +1,15 @@
-FROM python:3.12-slim
+FROM python:3.10-slim
 
-# Install dependencies (including FFmpeg from the official FFmpeg repository)
-RUN apt-get update && apt-get install -y \
-    libsndfile1 \
-    git \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
-# Download FFmpeg manually
-RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz -O /tmp/ffmpeg.tar.xz && \
-    tar -xvf /tmp/ffmpeg.tar.xz -C /tmp && \
-    mv /tmp/ffmpeg-*/ffmpeg /usr/local/bin/ && \
-    mv /tmp/ffmpeg-*/ffprop /usr/local/bin/ && \
-    rm -rf /tmp/ffmpeg*
-
-# Check FFmpeg installation and its path
-RUN ffmpeg -version && which ffmpeg
-
-# Clone your GitHub repository into the container
-RUN git clone https://github.com/ssohail81/Speeh-Emotion-Recognition-ML-Project-.git /app
-
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements.txt file into the container
 COPY requirements.txt .
-
-# Install dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port the application will run on
+COPY . .
+
 EXPOSE 8080
-
-# Set the environment variable for Flask
-ENV FLASK_APP=app.py
-ENV FLASK_RUN_HOST=0.0.0.0
-
-# Command to run the application (Flask)
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+CMD ["python", "app.py"]
