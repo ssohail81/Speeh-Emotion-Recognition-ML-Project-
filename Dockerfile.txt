@@ -1,26 +1,31 @@
-# Use a Python base image
+# Use Python base image
 FROM python:3.13-slim
 
-# Install FFmpeg
+# Install FFmpeg and dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Clone your GitHub repository into the container
+RUN git clone https://github.com/ssohail81/Speeh-Emotion-Recognition-ML-Project-.git /app
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file into the container
+# Copy the requirements.txt file into the container
 COPY requirements.txt .
 
-# Install dependencies
+# Install dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application files
-COPY . .
-
-# Expose the application port
+# Expose the port the application will run on
 EXPOSE 8080
 
-# Command to run the application
-CMD ["python", "app.py"]
+# Set the environment variable for Flask
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+
+# Command to run the application (Flask)
+CMD ["flask", "run", "--host=0.0.0.0", "--port=8080"]
