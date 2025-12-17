@@ -1,12 +1,21 @@
-# Use Python base image
 FROM python:3.13-slim
 
-# Install FFmpeg and dependencies
+# Install dependencies (including FFmpeg from the official FFmpeg repository)
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
     libsndfile1 \
     git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Download FFmpeg manually
+RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz -O /tmp/ffmpeg.tar.xz && \
+    tar -xvf /tmp/ffmpeg.tar.xz -C /tmp && \
+    mv /tmp/ffmpeg-*/ffmpeg /usr/local/bin/ && \
+    mv /tmp/ffmpeg-*/ffprop /usr/local/bin/ && \
+    rm -rf /tmp/ffmpeg*
+
+# Check FFmpeg installation and its path
+RUN ffmpeg -version && which ffmpeg
 
 # Clone your GitHub repository into the container
 RUN git clone https://github.com/ssohail81/Speeh-Emotion-Recognition-ML-Project-.git /app
@@ -28,4 +37,4 @@ ENV FLASK_APP=app.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
 # Command to run the application (Flask)
-CMD ["flask", "run", "--host=0.0.0.0", "--port=8080"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
